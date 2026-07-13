@@ -11,7 +11,7 @@
 
 ## v0.1.2
 
-- [ ] Header Parser
+- [x] Header Parser
 
 ---
 
