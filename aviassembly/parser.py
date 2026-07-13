@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Collection
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, field
 
+from .part import BuildingPart
 from .plane import Plane
 from .reader import GameDataReader
+
+
+TransformPayloadReader = Callable[[GameDataReader, BuildingPart], None]
 
 
 @dataclass(slots=True)
@@ -41,6 +45,39 @@ class HeaderParser:
         if first_part_name in self.known_part_names:
             return 18
         return reader.read_int()
+
+
+@dataclass(slots=True)
+class TransformParser:
+    """Parse the fixed transform data stored for every plane part.
+
+    The original game writes subtype-specific transform payloads immediately
+    after a part's scale. Callers can supply readers for those known part names
+    to consume their exact payload before the next part is parsed.
+    """
+
+    payload_readers: Mapping[str, TransformPayloadReader] = field(
+        default_factory=dict
+    )
+
+    def parse(self, reader: GameDataReader) -> list[BuildingPart]:
+        """Read the plane-data transform collection from *reader*."""
+        part_count = reader.read_int()
+        return [self._read_part(reader) for _ in range(part_count)]
+
+    def _read_part(self, reader: GameDataReader) -> BuildingPart:
+        part = BuildingPart(
+            name=reader.read_string(),
+            position=reader.read_vector3(),
+            rotation=reader.read_quaternion(),
+            scale=reader.read_vector3(),
+        )
+
+        payload_reader = self.payload_readers.get(part.name)
+        if payload_reader is not None:
+            payload_reader(reader, part)
+
+        return part
 
 
 class PlaneParser:
