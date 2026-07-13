@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from .part import BuildingPart, Decal
 from .plane import Plane
-from .reader import GameDataReader
+from .reader import BinaryReader, GameDataReader
 from .types import Vector3
 
 
@@ -61,6 +62,7 @@ class TransformParser:
     payload_readers: Mapping[str, TransformPayloadReader] = field(
         default_factory=dict
     )
+    track_offsets: bool = False
 
     def parse(self, reader: GameDataReader) -> list[BuildingPart]:
         """Read the plane-data transform collection from *reader*."""
@@ -68,12 +70,17 @@ class TransformParser:
         return [self._read_part(reader) for _ in range(part_count)]
 
     def _read_part(self, reader: GameDataReader) -> BuildingPart:
+        name = reader.read_string()
+        transform_offset = reader.get_stream_position()
         part = BuildingPart(
-            name=reader.read_string(),
+            name=name,
             position=reader.read_vector3(),
             rotation=reader.read_quaternion(),
             scale=reader.read_vector3(),
         )
+
+        if self.track_offsets:
+            part.extra["_transform_offset"] = transform_offset
 
         payload_reader = self.payload_readers.get(part.name)
         if payload_reader is not None:
@@ -186,5 +193,41 @@ class MetadataParser:
 
 
 class PlaneParser:
-    def parse(self, path: str) -> Plane:
-        raise NotImplementedError("Parser implementation in progress.")
+    """Read version-25 plane designs while preserving non-transform payloads."""
+
+    def parse(self, path: str | Path) -> Plane:
+        source_path = Path(path)
+        source_data = source_path.read_bytes()
+        import io
+
+        reader = GameDataReader(BinaryReader(io.BytesIO(source_data)))
+        plane = HeaderParser().parse(reader)
+        if plane.version != 25:
+            raise ValueError(
+                "Only current version-25 plane designs can be edited safely; "
+                f"received version {plane.version}."
+            )
+
+        parts = TransformParser(
+            payload_readers={"Body(Clone)": self._read_procedural_fuselage},
+            track_offsets=True,
+        ).parse(reader)
+        plane.parts = parts
+        plane.source_data = source_data
+        plane.source_path = source_path
+        return plane
+
+    @staticmethod
+    def _read_procedural_fuselage(
+        reader: GameDataReader,
+        part: BuildingPart,
+    ) -> None:
+        """Consume the exact 72-byte ``ProceduralFuselage.Save`` payload."""
+        part.extra["procedural_fuselage"] = {
+            "side1_radius": reader.read_vector2(),
+            "side2_radius": reader.read_vector2(),
+            "side1_length_offset": reader.read_vector3(),
+            "side2_length_offset": reader.read_vector3(),
+            "side1_roundness": reader.read_vector4(),
+            "side2_roundness": reader.read_vector4(),
+        }

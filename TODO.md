@@ -29,6 +29,7 @@
 
 ## v0.2.0
 
+- [x] Lossless version-25 Plane Parser and transform exporter
 - [ ] JSON Export
 
 ---

@@ -6,11 +6,12 @@ import pytest
 
 from aviassembly import HeaderParser as PublicHeaderParser
 from aviassembly import MetadataParser as PublicMetadataParser
+from aviassembly import PlaneWriter
 from aviassembly import TransformParser as PublicTransformParser
 from aviassembly.part import BuildingPart, Decal
-from aviassembly.parser import HeaderParser, MetadataParser, TransformParser
+from aviassembly.parser import HeaderParser, MetadataParser, PlaneParser, TransformParser
 from aviassembly.reader import BinaryReader, GameDataReader
-from aviassembly.types import Color, Quaternion, Vector3
+from aviassembly.types import Color, Quaternion, Vector2, Vector3, Vector4
 from aviassembly.writer import BinaryWriter, GameDataWriter
 
 
@@ -246,6 +247,44 @@ def test_decal_preserves_its_existing_positional_data_argument() -> None:
 
     assert decal.name == "Legacy Decal"
     assert decal.data == {"source": "existing caller"}
+
+
+def test_plane_parser_and_writer_preserve_unknown_data(tmp_path) -> None:
+    source = tmp_path / "source.planedesign"
+    output = tmp_path / "output.planedesign"
+    stream = io.BytesIO()
+    writer = GameDataWriter(BinaryWriter(stream))
+    writer.write_int(25)
+    writer.write_float(42.0)
+    writer.write_int(1)
+    writer.write_string("Body")
+    writer.write_int(1)
+    writer.write_string("Body(Clone)")
+    writer.write_vector3(Vector3(1.0, 2.0, 3.0))
+    writer.write_quaternion(Quaternion(0.0, 0.0, 0.0, 1.0))
+    writer.write_vector3(Vector3(1.0, 1.0, 1.0))
+    writer.write_vector2(Vector2(0.5, 0.5))
+    writer.write_vector2(Vector2(0.5, 0.5))
+    writer.write_vector3(Vector3(0.0, 0.0, 0.5))
+    writer.write_vector3(Vector3(0.0, 0.0, 0.5))
+    writer.write_vector4(Vector4(1.0, 1.0, 1.0, 1.0))
+    writer.write_vector4(Vector4(1.0, 1.0, 1.0, 1.0))
+    writer.writer.bytes(b"unparsed metadata remains byte-for-byte intact")
+    source.write_bytes(stream.getvalue())
+
+    plane = PlaneParser().parse(source)
+    assert plane.parts[0].position == Vector3(1.0, 2.0, 3.0)
+    fuselage = plane.parts[0].extra["procedural_fuselage"]
+    assert fuselage["side1_radius"] == Vector2(0.5, 0.5)
+
+    PlaneWriter().write(plane, output)
+    assert output.read_bytes() == source.read_bytes()
+
+    plane.parts[0].position = Vector3(4.0, 5.0, 6.0)
+    PlaneWriter().write(plane, output)
+    reparsed = PlaneParser().parse(output)
+    assert reparsed.parts[0].position == Vector3(4.0, 5.0, 6.0)
+    assert output.read_bytes().endswith(b"unparsed metadata remains byte-for-byte intact")
 
 
 def _write_metadata_prefix(
