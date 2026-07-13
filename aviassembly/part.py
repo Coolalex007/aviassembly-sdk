@@ -10,6 +10,13 @@ from .types import Color, Quaternion, Vector3
 class Decal:
     name: str = ""
     data: dict[str, Any] = field(default_factory=dict)
+    color: Color | None = None
+    layer: int = 0
+    position: Vector3 = field(default_factory=lambda: Vector3(0.0, 0.0, 0.0))
+    rotation: Quaternion = field(
+        default_factory=lambda: Quaternion(0.0, 0.0, 0.0, 1.0)
+    )
+    scale: Vector3 = field(default_factory=lambda: Vector3(1.0, 1.0, 1.0))
 
 
 @dataclass(slots=True)

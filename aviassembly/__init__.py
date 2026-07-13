@@ -1,1 +1,1 @@
-from .parser import HeaderParser, PlaneParser, TransformParser
+from .parser import HeaderParser, MetadataParser, PlaneParser, TransformParser

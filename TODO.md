@@ -23,7 +23,7 @@
 
 ## v0.1.4
 
-- [ ] BuildingPart Metadata
+- [x] BuildingPart Metadata
 
 ---
 
