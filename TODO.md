@@ -2,10 +2,10 @@
 
 ## v0.1.1
 
-- [ ] BinaryWriter
-- [ ] GameDataReader
-- [ ] GameDataWriter
-- [ ] Unit Tests
+- [x] BinaryWriter
+- [x] GameDataReader
+- [x] GameDataWriter
+- [x] Unit Tests
 
 ---
 
