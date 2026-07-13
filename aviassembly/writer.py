@@ -7,6 +7,8 @@ import struct
 from dataclasses import dataclass
 from typing import BinaryIO, Iterable
 
+from .types import Color, Quaternion, Vector2, Vector3, Vector4
+
 
 @dataclass(slots=True)
 class BinaryWriter:
@@ -126,3 +128,104 @@ class BinaryWriter:
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(position={self.position}, length={self.length})"
+
+
+@dataclass(slots=True)
+class GameDataWriter:
+    """Write the Unity value encodings used by Aviassembly game data."""
+
+    writer: BinaryWriter
+
+    def write(self, value: object) -> None:
+        """Write a value supported by the C# ``GameDataWriter`` overloads.
+
+        Python has one ``int`` and one ``float`` type, so 64-bit integers and
+        doubles are intentionally written through :meth:`write_long` and
+        :meth:`write_double` rather than inferred from a value.
+        """
+        if value is None or isinstance(value, str):
+            self.write_string(value)
+        elif isinstance(value, bool):
+            self.write_bool(value)
+        elif isinstance(value, int):
+            self.write_int(value)
+        elif isinstance(value, float):
+            self.write_float(value)
+        elif isinstance(value, Quaternion):
+            self.write_quaternion(value)
+        elif isinstance(value, Vector2):
+            self.write_vector2(value)
+        elif isinstance(value, Vector3):
+            self.write_vector3(value)
+        elif isinstance(value, Vector4):
+            self.write_vector4(value)
+        elif isinstance(value, Color):
+            self.write_color(value)
+        else:
+            raise TypeError(f"Unsupported GameData value: {type(value).__name__}.")
+
+    def write_bool(self, value: bool) -> None:
+        self.writer.bool(value)
+
+    def write_string(self, value: str | None) -> None:
+        """Write a C# ``string.IsNullOrEmpty`` sentinel and its value."""
+        is_null_or_empty = not value
+        self.writer.bool(is_null_or_empty)
+        if not is_null_or_empty:
+            self.writer.string(value)
+
+    def write_float(self, value: float) -> None:
+        self.writer.float(value)
+
+    def write_double(self, value: float) -> None:
+        self.writer.double(value)
+
+    def write_int(self, value: int) -> None:
+        self.writer.int32(value)
+
+    def write_long(self, value: int) -> None:
+        self.writer.int64(value)
+
+    def write_quaternion(self, value: Quaternion) -> None:
+        self.writer.float(value.x)
+        self.writer.float(value.y)
+        self.writer.float(value.z)
+        self.writer.float(value.w)
+
+    def write_vector2(self, value: Vector2) -> None:
+        self.writer.float(value.x)
+        self.writer.float(value.y)
+
+    def write_vector3(self, value: Vector3) -> None:
+        self.writer.float(value.x)
+        self.writer.float(value.y)
+        self.writer.float(value.z)
+
+    def write_vector4(self, value: Vector4) -> None:
+        self.writer.float(value.x)
+        self.writer.float(value.y)
+        self.writer.float(value.z)
+        self.writer.float(value.w)
+
+    def write_color(self, value: Color) -> None:
+        self.writer.float(value.r)
+        self.writer.float(value.g)
+        self.writer.float(value.b)
+        self.writer.float(value.a)
+
+    def write_type_name(self, value: str) -> None:
+        """Write a raw C# assembly-qualified type name without a sentinel."""
+        self.writer.string(value)
+
+    def write_type(self, value: str) -> None:
+        """Compatibility alias for :meth:`write_type_name`."""
+        self.write_type_name(value)
+
+    def get_position(self) -> int:
+        return self.writer.position
+
+    def write_stream(self, stream: BinaryIO) -> None:
+        """Copy *stream* from its start, matching C# ``Stream.CopyTo`` usage."""
+        stream.seek(0)
+        while data := stream.read(1024 * 1024):
+            self.writer.write(data)
